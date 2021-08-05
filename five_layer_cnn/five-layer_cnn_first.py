@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding=utf-8 -*-
+
 import glob as gl
 import math
 import numpy as np
@@ -40,7 +43,7 @@ def extract_data(indexes):
         dtype=np.float64)
     labels = []
 
-    for i in xrange(nbImages):
+    for i in range(nbImages):
         if indexes[i] < STEGO:
             # Load covers
             filename = cover_dir + str(random_images[indexes[i]] + 1) + ".pgm"
@@ -72,7 +75,7 @@ def extract_data_single(indexes):
         shape=(nbImages, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS),
         dtype=np.float64)
     labels = []
-    for i in xrange(nbImages):
+    for i in range(nbImages):
         if indexes[i] < STEGO:
             # Load covers
             filename = cover_dir + str(random_images[indexes[i]] + 1) + ".pgm"
@@ -302,7 +305,7 @@ steg = np.add(im_train, np.ones(im_train.shape, dtype=np.int) * STEGO)
 arr_train = np.concatenate((im_train, steg), axis=0)
 
 np.random.shuffle(arr_train)
-indexes_train = [arr_train[i:i + BATCH_SIZE] for i in xrange(0, len(arr_train), BATCH_SIZE)]
+indexes_train = [arr_train[i:i + BATCH_SIZE] for i in range(0, len(arr_train), BATCH_SIZE)]
 train_size = len(indexes_train)
 
 # print arr_train
@@ -319,7 +322,7 @@ arr_test = np.concatenate((im_test, steg), axis=0)
 # test data are shuffled
 np.random.seed(seed)
 np.random.shuffle(arr_test)
-indexes_test = [arr_test[i:i + BATCH_SIZE] for i in xrange(0, len(arr_test), BATCH_SIZE)]
+indexes_test = [arr_test[i:i + BATCH_SIZE] for i in range(0, len(arr_test), BATCH_SIZE)]
 test_size = len(indexes_test)
 
 ##########
@@ -335,10 +338,10 @@ key = np.arange(1, 3)
 if network == '':
     print("training a network")
     start_time = time.time()
-    for ep in xrange(num_epochs):
+    for ep in range(num_epochs):
         np.random.shuffle(key)
         k_key = key[0]
-        for step in xrange(train_size - 1):
+        for step in range(train_size - 1):
 
             batch_index = step
             batch_data, batch_labels = extract_data_single(indexes_train[batch_index])
@@ -372,7 +375,7 @@ if network == '':
                 train_accuracy = accuracy.eval(session=sess,
                                                feed_dict={x: batch_data, y: batch_labels, phase_train: True})
 
-                for global_test_index in xrange(test_size - 1):
+                for global_test_index in range(test_size - 1):
                     gtest_data, gtest_labels = extract_data_single(indexes_test[global_test_index])
                     batch_accuracy = accuracy.eval(session=sess,
                                                    feed_dict={x: gtest_data, y: gtest_labels, phase_train: False})
@@ -387,11 +390,10 @@ if network == '':
                 print("Global Test accuracy")
                 print(global_accuracy)
                 print("Confusion_matrix")
-                print
-                confusion_matrix(global_test_predlabels, global_test_truelabels)
+                print(confusion_matrix(global_test_predlabels, global_test_truelabels))
 
                 np.random.shuffle(arr_train)
-                indexes_train = [arr_train[i:i + BATCH_SIZE] for i in xrange(0, len(arr_train), BATCH_SIZE)]
+                indexes_train = [arr_train[i:i + BATCH_SIZE] for i in range(0, len(arr_train), BATCH_SIZE)]
                 train_size = len(indexes_train)
                 print("SHUFFLE")
 
@@ -405,7 +407,7 @@ else:
     global_test_predlabels = []
     global_test_truelabels = []
     gtest_accuracy = np.ndarray(shape=(test_size), dtype=np.float32)
-    for global_test_index in xrange(test_size - 1):
+    for global_test_index in range(test_size - 1):
         gtest_data, gtest_labels = extract_data_single(indexes_test[global_test_index])
         # print gtest_labels
         batch_accuracy = accuracy.eval(session=sess,
@@ -422,5 +424,4 @@ else:
     print("Global Test accuracy")
     print(global_accuracy)
     print("Confusion_matrix")
-    print
-    confusion_matrix(global_test_predlabels, global_test_truelabels)
+    print(confusion_matrix(global_test_predlabels, global_test_truelabels))
