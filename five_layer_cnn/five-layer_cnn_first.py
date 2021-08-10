@@ -15,16 +15,13 @@ IMAGE_SIZE = 512
 NUM_CHANNELS = 1
 PIXEL_DEPTH = 255.
 NUM_LABELS = 2
-
 NUM_EPOCHS = 2000
-
-STEGO = 50000
-
-FLAGS = tf.app.flags.FLAGS
+STEGO = 50000  # 隐写图片数量？
+FLAGS = tf.app.flags.FLAGS  #
 
 
 def read_pgm(filename):
-    img1 = cv2.imread(filename, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+    img1 = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
     h, w = img1.shape[:2]
     vis0 = np.zeros((h, w), np.float32)
     vis0[:h, :w] = img1
@@ -97,12 +94,12 @@ def extract_data_single(indexes):
 
 
 def weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev=0.1)
+    initial = tf.truncated_normal(shape, stddev=0.1)  # 按照shape定义的纬度，截断的产生正态分布的随机数张量（随机数与均值的差值若大于两倍的标准差，则重新生成）。
     return tf.Variable(initial)
 
 
 def bias_variable(shape):
-    initial = tf.constant(0.1, shape=shape)
+    initial = tf.constant(0.1, shape=shape)  # 按照shape定义的纬度，创建一个常数张量
     return tf.Variable(initial)
 
 
@@ -110,21 +107,21 @@ def conv2d(x, W):
     return tf.nn.conv2d(input=x, filter=W, strides=[1, 1, 1, 1], padding='SAME')
 
 
-tf.app.flags.DEFINE_string('cover_dir', '', """Directory containing cover images.""")
-tf.app.flags.DEFINE_string('stego_dir', '', """directory containing stego images.""")
+tf.app.flags.DEFINE_string('cover_dir', 'E:\\tensor_resorce\\BossBaseDataSet1.01\\BossBase-1.01-cover\\', """Directory containing cover images.""")
+tf.app.flags.DEFINE_string('stego_dir', 'E:\\tensor_resorce\\BossBaseDataSet1.01\\BossBase-1.01-hugo-alpha0.4\\', """directory containing stego images.""")
 tf.app.flags.DEFINE_string('stego_test_dir', '', """directory containing stego images.""")
 tf.app.flags.DEFINE_string('network', '', """Pretrained network.""")
-
-tf.app.flags.DEFINE_string('seed', '', """Seed.""")
-tf.app.flags.DEFINE_string('batch_size', '', """batch size.""")
+tf.app.flags.DEFINE_string('seed', '2', """Seed.""")
+tf.app.flags.DEFINE_string('batch_size', '64', """batch size.""")
 
 network = FLAGS.network
-seed = int(FLAGS.seed)
+seed = int(FLAGS.seed)  # 如果没有设置seed参数的取值，那么每次执行程序所产生的随机数或者随机序列均不等。
 
 BATCH_SIZE = int(FLAGS.batch_size)
 
 tf.set_random_seed(seed)
 
+# 定义一个可交互的TensorFlow会话（重复使用，减少传递sess作为参数的次数），# 未指定session时，其作为默认会话被调用
 sess = tf.InteractiveSession()
 
 # 1 - Define the input x_image 
@@ -137,65 +134,68 @@ y_image = y
 # print(x_image.get_shape())
 # print(y_image.get_shape())
 
-##########
-
-# A - Definition of the CNN
-
-##########
-
-##### 0 - Paremeter used in the Batch-Normalization
+# ########## A - Definition of the CNN ##########
+# #### 0 - Paremeter used in the Batch-Normalization
 epsilon = 1e-4
 
-##### 1 - High-pass filtering definition (F_0)
-
+# #### 1 - High-pass filtering definition (F_0)，tf.cast，将张量转换为指定的新类型
 F_0 = tf.cast(tf.constant([[[[-1 / 12.]], [[2 / 12.]], [[-2 / 12.]], [[2 / 12.]], [[-1 / 12.]]],
                            [[[2 / 12.]], [[-6 / 12.]], [[8 / 12.]], [[-6 / 12.]], [[2 / 12.]]],
                            [[[-2 / 12.]], [[8 / 12.]], [[-12 / 12.]], [[8 / 12.]], [[-2 / 12.]]],
                            [[[2 / 12.]], [[-6 / 12.]], [[8 / 12.]], [[-6 / 12.]], [[2 / 12.]]],
                            [[[-1 / 12.]], [[2 / 12.]], [[-2 / 12.]], [[2 / 12.]], [[-1 / 12.]]]]), "float")
 
-##### 2 - Definition of the first convolutional layer - input image => 1 feature map
+# #### 2 - Definition of the first convolutional layer - input image => 1 feature map
 # Convolution without F_0 (search for another filter 5x5) - PADDING
 
 
-z_c = tf.nn.conv2d(tf.cast(x_image, "float"), F_0, strides=[1, 1, 1, 1], padding='SAME')
+z_c = tf.nn.conv2d(tf.cast(x_image, "float"), F_0, strides=[1, 1, 1, 1], padding='SAME')  # 对原始图像进行高通滤波
 
-phase_train = tf.placeholder(tf.bool, name='phase_train')
+phase_train = tf.placeholder(tf.bool, name='phase_train')  # 占位符，训练阶段
 
 
-##### Definition of a function for the following convolution layers - size_in feature maps => size_out feature maps
+# #### Definition of a function for the following convolution layers - size_in feature maps => size_out feature maps
 def my_conv_layer(in1, filter_height, filter_width, size_in, size_out, pooling_size, stride_size, active, fabs,
                   padding_type):
+    # 定义卷积核
     # Convolution with filter_height x filter_width filters 
     W_conv = weight_variable([filter_height, filter_width, size_in, size_out])
+
+    # ### 卷积操作
     z_conv = conv2d(in1, W_conv)
+
+    # ### 绝对值激活函数操作
     if fabs == 1:
         # Absolute activation
         z_conv = tf.abs(z_conv)
-    # Batch normalization
 
-    beta = tf.Variable(tf.constant(0.0, shape=[size_out]), name='beta', trainable=True)
-    gamma = tf.Variable(tf.constant(1.0, shape=[size_out]), name='gamma', trainable=True)
-    batch_mean, batch_var = tf.nn.moments(z_conv, [0, 1, 2])
+    # ### BN层的参数预处理
+    # Batch normalization 批量归一化
+    beta = tf.Variable(tf.constant(0.0, shape=[size_out]), name='beta', trainable=True)  # 给定初值并定义变量
+    gamma = tf.Variable(tf.constant(1.0, shape=[size_out]), name='gamma', trainable=True)  # 给定初值并定义变量
+    batch_mean, batch_var = tf.nn.moments(z_conv, [0, 1, 2])  # 获取z_conv的均值和方差
+    # 滑动平均, 增加参数稳定性
     ema = tf.train.ExponentialMovingAverage(decay=0.1)  # previously 0.3
-
     def mean_var_with_update():
+        # 控制计算的过程顺序？
         ema_apply_op = ema.apply([batch_mean, batch_var])
         with tf.control_dependencies([ema_apply_op]):
             return tf.identity(batch_mean), tf.identity(batch_var)
-
+    # 如果phase_train值为1，赋值等于函数mean_var_with_update的返回结果，否则赋值等于另一个函数返回结果
     mean, var = tf.cond(phase_train,
                         mean_var_with_update,
-                        lambda: (ema.average(batch_mean), ema.average(batch_var)))
-
+                        lambda: (ema.average(batch_mean), ema.average(batch_var)))  # lambda函数表达式，冒号后两个表达式作为函数返回结果
     BN_conv = tf.nn.batch_normalization(z_conv, mean, var, beta, gamma, epsilon)
 
+    # ### 根据需要设置激活函数
     if active == 1:
         # TanH activation
         f_conv = tf.nn.tanh(BN_conv)
     else:
         # ReLU activation
         f_conv = tf.nn.relu(BN_conv)
+
+    # ### 平均池化操作
     # Average pooling  - pooling_size x pooling_size - stride_size - PADDING
     out = tf.nn.avg_pool(f_conv, ksize=[1, pooling_size, pooling_size, 1], strides=[1, stride_size, stride_size, 1],
                          padding=padding_type)
@@ -249,7 +249,7 @@ def my_fullcon_layer(in1, size_in, neurons):
 # Without the hidden layer - input = 128 features - output = 2 softmax neurons outputs
 W_fc = weight_variable([256, 2])
 b_fc = bias_variable([2])
-y_pred = tf.nn.softmax(tf.matmul(f_conv, W_fc) + b_fc)
+y_pred = tf.nn.softmax(tf.matmul(f_conv, W_fc) + b_fc)  # 重塑末层输出f_conv(BN层的反向操作)，然后进行分类
 
 ##########
 
@@ -291,17 +291,17 @@ sess.run(tf.initialize_all_variables())
 
 
 # images are permuted according to the random number generation of the seed
-random_images = np.arange(0, 10000)
+random_images = np.arange(0, 8000)
 np.random.seed(seed)
 np.random.shuffle(random_images)
 
-im_train = random_images[0:5000]
-im_test = random_images[5000:10000]
+im_train = random_images[0:4000]
+im_test = random_images[4000:8000]
 
 ##### 1 - Define training data when no given network
 # if network=='':
 
-steg = np.add(im_train, np.ones(im_train.shape, dtype=np.int) * STEGO)
+steg = np.add(im_train, np.ones(im_train.shape, dtype=np.int32) * STEGO)
 arr_train = np.concatenate((im_train, steg), axis=0)
 
 np.random.shuffle(arr_train)
@@ -316,7 +316,7 @@ train_size = len(indexes_train)
 ##### 2 - Define testing data
 
 
-steg = np.add(im_test, np.ones(im_test.shape, dtype=np.int) * STEGO)
+steg = np.add(im_test, np.ones(im_test.shape, dtype=np.int32) * STEGO)
 arr_test = np.concatenate((im_test, steg), axis=0)
 
 # test data are shuffled
@@ -421,7 +421,9 @@ else:
         global_test_truelabels = np.concatenate((global_test_truelabels, gtest_truelabels), axis=0)
 
     global_accuracy = reduce_accuracy.eval(session=sess, feed_dict={tab: gtest_accuracy})
-    print("Global Test accuracy")
+    print("Global Test accuracy")  # 全局测试准确率
     print(global_accuracy)
     print("Confusion_matrix")
+    # 混淆矩阵，预测分类结果与实际分类结果交叉比较，用于评价图片分类精度
+    # 参见https://baike.baidu.com/item/%E6%B7%B7%E6%B7%86%E7%9F%A9%E9%98%B5/10087822?fr=aladdin
     print(confusion_matrix(global_test_predlabels, global_test_truelabels))
