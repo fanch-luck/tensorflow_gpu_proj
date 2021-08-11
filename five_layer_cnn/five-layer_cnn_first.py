@@ -17,6 +17,7 @@ PIXEL_DEPTH = 255.
 NUM_LABELS = 2
 NUM_EPOCHS = 1  # 原2000
 STEGO = 50000
+BATCH_SIZE = 64  # 原64
 FLAGS = tf.app.flags.FLAGS  #
 
 
@@ -113,29 +114,29 @@ def conv2d(x, W):
 
 
 def show_layer(name,  tensor_64):
-    # 显示层输出结果（图像）
-    for i in range(64):
+    # 用于tensorboard显示层输出结果（图像）
+    for i in range(tensor_64.shape[-1]):
         begin = [0, 0, 0, i]
         size = [1, -1, -1, 1]
         tensor_1 = tf.slice(tensor_64, begin, size)
-        tf.summary.image(name, tensor_1, max_outputs=64)
+        tf.summary.image(name, tensor_1, max_outputs=BATCH_SIZE)
     return
 
 
 def scalar_logger(tf_writer, name, value, step):
-    # 显示单一、变化的参数
+    # 用于tensorboard显示单一、变化的参数
     v = tf.Summary.Value(tag=name, simple_value=value)
     s = tf.Summary(value=[v])
     tf_writer.add_summary(s, step)
     return
 
 
-tf.app.flags.DEFINE_string('cover_dir', 'G:\\BossBase-1.01-cover\\', """Directory containing cover images.""")
-tf.app.flags.DEFINE_string('stego_dir', 'G:\\BossBase-1.01-hugo-alpha0.4\\', """directory containing stego images.""")
+tf.app.flags.DEFINE_string('cover_dir', 'E:\\tensor_resorce\\BossBaseDataSet1.01\\BossBase-1.01-cover\\', """Directory containing cover images.""")
+tf.app.flags.DEFINE_string('stego_dir', 'E:\\tensor_resorce\\BossBaseDataSet1.01\\BossBase-1.01-hugo-alpha0.4\\', """directory containing stego images.""")
 tf.app.flags.DEFINE_string('stego_test_dir', '', """directory containing stego images.""")
 tf.app.flags.DEFINE_string('network', '', """Pretrained network.""")
 tf.app.flags.DEFINE_string('seed', '2', """Seed.""")
-tf.app.flags.DEFINE_string('batch_size', '64', """batch size.""")
+tf.app.flags.DEFINE_string('batch_size', '{}'.format(BATCH_SIZE), """batch size.""")
 
 network = FLAGS.network
 seed = int(FLAGS.seed)  # 如果没有设置seed参数的取值，那么每次执行程序所产生的随机数或者随机序列均不等。
@@ -150,8 +151,12 @@ sess = tf.InteractiveSession()
 # 1 - Define the input x_image
 x = tf.placeholder(tf.float32, shape=(BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, 1), name='X')
 x_image = x
-input_image = tf.reshape(x_image, [-1, 28, 28, 1])
-tf.summary.image('xx_image', input_image)
+
+# tensorboard 显示输入图像
+x255 = (x + 0.5) * PIXEL_DEPTH
+show_image = tf.reshape(x255, [BATCH_SIZE, IMAGE_SIZE, IMAGE_SIZE, NUM_CHANNELS])  # 64 512 512 1
+tf.summary.image('show_image', show_image, BATCH_SIZE)
+
 # 2 - Define the expected output y_image
 y = tf.placeholder(tf.float32, shape=(BATCH_SIZE, 2), name='Y')
 y_image = y
@@ -233,7 +238,10 @@ def my_conv_layer(in1, filter_height, filter_width, size_in, size_out, pooling_s
             strides=[1, stride_size, stride_size, 1],
             padding=padding_type
         )
-        show_layer('conv', out)  # 显示层输出
+        # tensorboard 显示中间层图像
+
+        mid_layer = (out + 0.5) * PIXEL_DEPTH
+        show_layer('mid_layer', mid_layer)  # 显示层输出
         return out
 
 
@@ -320,6 +328,10 @@ rounding = tf.argmax(y_pred, 1)  # 返回张量轴上具有最大值的索引，
 tab = tf.placeholder(tf.float32, [None], 'batch_acc')  # 存放各个batch acc的表
 reduce_accuracy = tf.reduce_mean(tab)
 
+
+# tensorboard, 将数据进行合并显示
+summ = tf.summary.merge_all()
+
 ##########
 # C - Initialization of all variables
 ##########
@@ -376,8 +388,6 @@ saver = tf.train.Saver(max_to_keep=1000)
 ##### 1 - Train a network
 key = np.arange(1, 3)
 
-# tensorboard, 将数据进行合并显示
-summ = tf.summary.merge_all()
 
 if network == '':
     print("training a network")
@@ -399,6 +409,12 @@ if network == '':
                     feed_dict={x: batch_data, y: batch_labels, phase_train: True}
                 )
                 scalar_logger(writer, 'accuracy', train_accuracy, step)
+
+                train_summ = summ.eval(
+                    session=sess,
+                    feed_dict={x: batch_data, y: batch_labels, phase_train: True}
+                )
+                writer.add_summary(train_summ, step)
 
                 if step % 40 == 0:
                     # 156个batch中，每过40个batch,计算一次train_accuracy和test_accuracy
